@@ -49,23 +49,23 @@ BIOME_MSA_LOSS_PER_DEGC: Dict[int, float] = {
 @dataclass(frozen=True)
 class Paths:
     tas_hist: Path = Path(
-        "data/raw/MSA_CC/Data_Hist_Temp_TAS/"
+        "data/legacy/MSA_CC/Data_Hist_Temp_TAS/"
         "tas_Amon_CNRM-CM6-1-HR_historical_r1i1p1f2_gr_185001-201412.nc"
     )
     tas_ssp126: Path = Path(
-        "data/raw/MSA_CC/Data_ssp_Temp_TAS/"
+        "data/legacy/MSA_CC/Data_ssp_Temp_TAS/"
         "tas_Amon_CNRM-CM6-1-HR_ssp126_r1i1p1f2_gr_201501-210012.nc"
     )
     tas_ssp370: Path = Path(
-        "data/raw/MSA_CC/Data_ssp_Temp_TAS/"
+        "data/legacy/MSA_CC/Data_ssp_Temp_TAS/"
         "tas_Amon_CNRM-CM6-1-HR_ssp370_r1i1p1f2_gr_201501-210012.nc"
     )
     tas_ssp585: Path = Path(
-        "data/raw/MSA_CC/Data_ssp_Temp_TAS/"
+        "data/legacy/MSA_CC/Data_ssp_Temp_TAS/"
         "tas_Amon_CNRM-CM6-1-HR_ssp585_r1i1p1f2_gr_201501-210012.nc"
     )
 
-    biomes_tif: Path = Path("data/raw/MSA_CC/Data_Biomes/Biomes_Raster_Full.tif")
+    biomes_tif: Path = Path("data/legacy/MSA_CC/Data_Biomes/Biomes_Raster_Full.tif")
     oceans_nc: Path = Path("data/datamart/oceans.nc")
 
     out_dir: Path = Path("data/datamart/MSA_CC")

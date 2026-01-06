@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Build MSA_LU datamart files from raw LUH2 NetCDFs.
+Build MSA_LU datamart files from legacy LUH2 NetCDFs.
 
-Inputs (raw):  data/raw/MSA_LU/*.nc  (files containing 126 / 370 / 585 in name)
+Inputs (legacy):  data/legacy/MSA_LU/*.nc  (files containing 126 / 370 / 585 in name)
 Outputs:       data/datamart/MSA_LU/MSA_LU_126.nc (and 370/585)
                data/datamart/oceans.nc  (land=1, ocean=NA)
 
 Notes:
-- Step A: we assume raw data is already on the target grid (720x1440) and 86 years (2015-2100).
+- Step A: we assume legacy data is already on the target grid (720x1440) and 86 years (2015-2100).
 - We keep masked arrays to avoid "9.969e36" fill-value issues.
 """
 
@@ -26,7 +26,7 @@ import netCDF4 as nc
 # -----------------------------
 # Config (adaptable)
 # -----------------------------
-RAW_DIR = "data/raw/MSA_LU"
+legacy_DIR = "data/legacy/MSA_LU"
 OUT_ROOT = "data/datamart"
 OUT_DIR = os.path.join(OUT_ROOT, "MSA_LU")
 OCEANS_FILE = os.path.join(OUT_ROOT, "oceans.nc")
@@ -56,15 +56,15 @@ COEFF = {
 # -----------------------------
 # Helpers
 # -----------------------------
-def find_scenario_files(raw_dir: str) -> Dict[str, str]:
+def find_scenario_files(legacy_dir: str) -> Dict[str, str]:
     """
     Detect files for scenarios 126/370/585 based on filename containing these numbers.
     Returns dict like {"126": "/.../something_126.nc", ...}
     """
-    if not os.path.isdir(raw_dir):
-        raise FileNotFoundError(f"Raw dir not found: {raw_dir}")
+    if not os.path.isdir(legacy_dir):
+        raise FileNotFoundError(f"legacy dir not found: {legacy_dir}")
 
-    files = [os.path.join(raw_dir, f) for f in os.listdir(raw_dir) if f.lower().endswith(".nc")]
+    files = [os.path.join(legacy_dir, f) for f in os.listdir(legacy_dir) if f.lower().endswith(".nc")]
     scen_map: Dict[str, str] = {}
 
     for fp in sorted(files):
@@ -78,7 +78,7 @@ def find_scenario_files(raw_dir: str) -> Dict[str, str]:
 def _require_vars(ds: nc.Dataset, required: Dict[str, float]) -> None:
     missing = [k for k in required.keys() if k not in ds.variables]
     if missing:
-        raise KeyError(f"Missing variables in raw LU file: {missing}\nAvailable: {list(ds.variables.keys())}")
+        raise KeyError(f"Missing variables in legacy LU file: {missing}\nAvailable: {list(ds.variables.keys())}")
 
 
 def compute_msa_lu(ds: nc.Dataset) -> Tuple[np.ma.MaskedArray, np.ma.MaskedArray, np.ndarray, np.ndarray]:
@@ -93,7 +93,7 @@ def compute_msa_lu(ds: nc.Dataset) -> Tuple[np.ma.MaskedArray, np.ma.MaskedArray
     _require_vars(ds, COEFF)
 
     if "lat" not in ds.variables or "lon" not in ds.variables:
-        raise KeyError("Raw LU file must contain 'lat' and 'lon' variables.")
+        raise KeyError("legacy LU file must contain 'lat' and 'lon' variables.")
 
     lat = np.array(ds.variables["lat"][:])
     lon = np.array(ds.variables["lon"][:])
@@ -201,11 +201,11 @@ def write_oceans_nc(out_path: str, lat: np.ndarray, lon: np.ndarray, land_mask: 
 
 
 def main() -> None:
-    scen_files = find_scenario_files(RAW_DIR)
+    scen_files = find_scenario_files(legacy_DIR)
     if not scen_files:
-        raise FileNotFoundError(f"No .nc files containing 126/370/585 found in {RAW_DIR}")
+        raise FileNotFoundError(f"No .nc files containing 126/370/585 found in {legacy_DIR}")
 
-    print("Detected raw LU files:", scen_files)
+    print("Detected legacy LU files:", scen_files)
 
     first_land_mask = None
     first_lat = None
@@ -216,10 +216,10 @@ def main() -> None:
             print(f"[WARN] Scenario {scen} not found, skipping.")
             continue
 
-        raw_fp = scen_files[scen]
+        legacy_fp = scen_files[scen]
         out_fp = os.path.join(OUT_DIR, f"MSA_LU_{scen}.nc")
 
-        with nc.Dataset(raw_fp) as ds:
+        with nc.Dataset(legacy_fp) as ds:
             msa, land_mask, lat, lon = compute_msa_lu(ds)
 
         qc_report(f"MSA_LU_{scen}", msa)

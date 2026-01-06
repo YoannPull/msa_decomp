@@ -44,7 +44,7 @@ except ImportError as e:
 # -----------------------------
 @dataclass(frozen=True)
 class RoadConfig:
-    raw_root: Path = Path("data/raw/MSA_ROAD")
+    legacy_root: Path = Path("data/legacy/MSA_ROAD")
     out_root: Path = Path("data/datamart/MSA_ROAD")
 
     # adapt to your filenames
@@ -240,9 +240,9 @@ def build_msa_road(cfg: RoadConfig, debug: bool = False) -> np.ndarray:
       3) msa = 0.78*(n/9) + (9-n)/9
       4) normalize orientation to datamart, mask oceans to NaN
     """
-    p1 = cfg.raw_root / cfg.tp1
-    p2 = cfg.raw_root / cfg.tp2
-    p3 = cfg.raw_root / cfg.tp3
+    p1 = cfg.legacy_root / cfg.tp1
+    p2 = cfg.legacy_root / cfg.tp2
+    p3 = cfg.legacy_root / cfg.tp3
 
     print("[INFO] Reading road rasters:")
     print(" -", p1)
