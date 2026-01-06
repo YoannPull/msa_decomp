@@ -1,10 +1,11 @@
-# Makefile — Carrefour MSA pipeline (LU + ROAD + CC + N)
+# Makefile — Carrefour MSA pipeline (LU + ROAD + CC + N + ENC)
 # Usage:
 #   make help
 #   make lu
 #   make road
 #   make cc
 #   make n
+#   make enc
 #   make plot-lu YEAR=2100 SCEN=126
 #   make plot-lu-all YEAR=2100
 #   make plot-road YEAR=2100 SCEN=126
@@ -13,6 +14,8 @@
 #   make plot-cc-all YEAR=2100
 #   make plot-n YEAR=2100 SCEN=126
 #   make plot-n-all YEAR=2100
+#   make plot-enc YEAR=2100 SCEN=126
+#   make plot-enc-all YEAR=2100
 
 PY := poetry run python
 
@@ -20,26 +23,30 @@ PY := poetry run python
 YEAR ?= 2100
 SCEN ?= 126
 
-.PHONY: help lu road cc n \
+.PHONY: help lu road cc n enc \
         plot-lu plot-lu-all \
         plot-road plot-road-all \
         plot-cc plot-cc-all \
-        plot-n plot-n-all
+        plot-n plot-n-all \
+        plot-enc plot-enc-all
 
 help:
 	@echo "Targets:"
-	@echo "  make lu                         -> build MSA_LU datamart (and oceans.nc)"
-	@echo "  make road                       -> build MSA_ROAD datamart"
-	@echo "  make cc                         -> build MSA_CC datamart"
-	@echo "  make n                          -> build MSA_N datamart"
-	@echo "  make plot-lu YEAR=2100 SCEN=126  -> plot one LU map to outputs/plots/"
-	@echo "  make plot-lu-all YEAR=2100       -> plot LU maps for 126,370,585"
-	@echo "  make plot-road YEAR=2100 SCEN=126-> plot one ROAD map to outputs/plots/"
-	@echo "  make plot-road-all YEAR=2100     -> plot ROAD maps for 126,370,585"
-	@echo "  make plot-cc YEAR=2100 SCEN=126  -> plot one CC map to outputs/plots/"
-	@echo "  make plot-cc-all YEAR=2100       -> plot CC maps for 126,370,585"
-	@echo "  make plot-n YEAR=2100 SCEN=126   -> plot one N map to outputs/plots/"
-	@echo "  make plot-n-all YEAR=2100        -> plot N maps for 126,370,585"
+	@echo "  make lu                          -> build MSA_LU datamart (and oceans.nc)"
+	@echo "  make road                        -> build MSA_ROAD datamart"
+	@echo "  make cc                          -> build MSA_CC datamart"
+	@echo "  make n                           -> build MSA_N datamart"
+	@echo "  make enc                         -> build MSA_ENC datamart"
+	@echo "  make plot-lu YEAR=2100 SCEN=126   -> plot one LU map to outputs/plots/"
+	@echo "  make plot-lu-all YEAR=2100        -> plot LU maps for 126,370,585"
+	@echo "  make plot-road YEAR=2100 SCEN=126 -> plot one ROAD map to outputs/plots/"
+	@echo "  make plot-road-all YEAR=2100      -> plot ROAD maps for 126,370,585"
+	@echo "  make plot-cc YEAR=2100 SCEN=126   -> plot one CC map to outputs/plots/"
+	@echo "  make plot-cc-all YEAR=2100        -> plot CC maps for 126,370,585"
+	@echo "  make plot-n YEAR=2100 SCEN=126    -> plot one N map to outputs/plots/"
+	@echo "  make plot-n-all YEAR=2100         -> plot N maps for 126,370,585"
+	@echo "  make plot-enc YEAR=2100 SCEN=126  -> plot one ENC map to outputs/plots/"
+	@echo "  make plot-enc-all YEAR=2100       -> plot ENC maps for 126,370,585"
 
 lu:
 	$(PY) scripts/build_msa_lu.py
@@ -52,6 +59,9 @@ cc:
 
 n:
 	$(PY) scripts/build_msa_n.py
+
+enc:
+	$(PY) scripts/build_msa_enc.py
 
 plot-lu:
 	$(PY) scripts/plot_msa_lu.py --year $(YEAR) --scen $(SCEN)
@@ -84,3 +94,11 @@ plot-n-all:
 	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 126
 	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 370
 	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 585
+
+plot-enc:
+	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen $(SCEN)
+
+plot-enc-all:
+	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 126
+	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 370
+	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 585
