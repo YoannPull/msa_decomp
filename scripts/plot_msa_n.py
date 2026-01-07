@@ -4,29 +4,29 @@
 """
 Plot MSA_N for a given scenario/year and save to outputs/plots/.
 
-Highlights (best readability for near-1 fields):
-- Default colormap: 'best' -> matplotlib 'turbo' (very readable / high contrast)
-- Default normalization: PowerNorm(gamma=0.35) to reveal differences close to 1
-- Default range: vmin=0.8, vmax=1.0
-- Optional 'ndep' custom palette (blue->cyan->green->yellow->orange->red)
+Defaults tuned for readability:
+- cmap: 'ndep_white' with OPTIONAL black top (values near vmax rendered black)
+- norm: PowerNorm(gamma) to reveal subtle differences close to 1
+- background land mask (oceans.nc) in light grey
 
 Usage:
   poetry run python scripts/plot_msa_n.py --scen 585 --year 2100
-  poetry run python scripts/plot_msa_n.py --scen 585 --year 2100 --cmap ndep --vmin 0.8 --vmax 1.0 --gamma 0.35
-  poetry run python scripts/plot_msa_n.py --scen 585 --year 2100 --cmap best --vmin 0.9 --vmax 1.0 --gamma 0.30 --show
+  poetry run python scripts/plot_msa_n.py --scen 585 --year 2100 --black-top --black-top-frac 0.02
+  poetry run python scripts/plot_msa_n.py --scen 585 --year 2100 --no-black-top
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
+from xarray.coding.times import CFDatetimeCoder
 
 
 DEFAULT_DIR = Path("data/datamart/MSA_N")
@@ -41,7 +41,8 @@ def _log(msg: str) -> None:
 def _open_ds(p: Path) -> xr.Dataset:
     if not p.exists():
         raise FileNotFoundError(f"Missing file: {p}")
-    return xr.open_dataset(p, decode_times=True, use_cftime=True)
+    time_coder = CFDatetimeCoder(use_cftime=True)
+    return xr.open_dataset(p, decode_times=time_coder)
 
 
 def _normalize_lon_to_180(da: xr.DataArray) -> xr.DataArray:
@@ -71,10 +72,26 @@ def _pick_var(ds: xr.Dataset, preferred: str = "MSA_N") -> str:
     raise KeyError(f"Could not find '{preferred}' in data_vars={list(ds.data_vars)}")
 
 
-def _infer_land_mask(oceans_nc: Path, template: xr.DataArray) -> Optional[xr.DataArray]:
-    """
-    Optional: mask oceans if oceans.nc exists and looks plausible.
-    """
+def _load_msa_n(msa_dir: Path, scen: int) -> xr.DataArray:
+    combined = msa_dir / "MSA_N.nc"
+    if combined.exists():
+        ds = _open_ds(combined)
+        var = _pick_var(ds, "MSA_N")
+        da = ds[var]
+        da = _normalize_lon_to_180(_ensure_lat_ascending(da))
+        if "scenario" not in da.dims:
+            raise ValueError(f"{combined} has no 'scenario' dim.")
+        return da.sel(scenario=scen)
+
+    scen_file = msa_dir / f"MSA_N_{scen}.nc"
+    ds = _open_ds(scen_file)
+    var = _pick_var(ds, "MSA_N")
+    da = ds[var]
+    da = _normalize_lon_to_180(_ensure_lat_ascending(da))
+    return da
+
+
+def _load_land_mask(oceans_nc: Path, template: xr.DataArray) -> Optional[xr.DataArray]:
     if not oceans_nc.exists():
         return None
     try:
@@ -99,59 +116,60 @@ def _infer_land_mask(oceans_nc: Path, template: xr.DataArray) -> Optional[xr.Dat
             _log(f"[INFO] oceans mask: land==0 (frac_zeros={frac_zeros:.3f})")
             return (m == 0) & (~xr.ufuncs.isnan(m))
 
-        _log("[WARN] oceans mask suspicious, skipping ocean masking.")
+        _log("[WARN] oceans mask suspicious, skipping background land mask.")
         return None
     except Exception as e:
-        _log(f"[WARN] cannot use oceans mask: {e}. skipping ocean masking.")
+        _log(f"[WARN] cannot use oceans mask: {e}. skipping background land mask.")
         return None
 
 
-def _load_msa_n(msa_dir: Path, scen: int) -> xr.DataArray:
-    """
-    Load MSA_N either from combined file MSA_N.nc (with scenario dim)
-    or from per-scenario file MSA_N_{scen}.nc.
-    """
-    combined = msa_dir / "MSA_N.nc"
-    if combined.exists():
-        ds = _open_ds(combined)
-        var = _pick_var(ds, "MSA_N")
-        da = ds[var]
-        da = _normalize_lon_to_180(_ensure_lat_ascending(da))
-        if "scenario" not in da.dims:
-            raise ValueError(f"{combined} has no 'scenario' dim.")
-        return da.sel(scenario=scen)
-
-    scen_file = msa_dir / f"MSA_N_{scen}.nc"
-    ds = _open_ds(scen_file)
-    var = _pick_var(ds, "MSA_N")
-    da = ds[var]
-    da = _normalize_lon_to_180(_ensure_lat_ascending(da))
-    return da
+def _base_ndep_white() -> LinearSegmentedColormap:
+    # 1.0 is near-white by default (great for showing impacts), then we may override top to black.
+    stops = [
+        (0.00, "#081d58"),  # deep blue
+        (0.15, "#225ea8"),  # blue
+        (0.30, "#41b6c4"),  # cyan
+        (0.45, "#7fcdbb"),  # blue-green
+        (0.60, "#c7e9b4"),  # light green
+        (0.72, "#ffffcc"),  # pale yellow
+        (0.84, "#fed976"),  # yellow/orange
+        (0.92, "#fd8d3c"),  # orange
+        (0.97, "#f03b20"),  # red-orange
+        (1.00, "#fff5f0"),  # near-white
+    ]
+    return LinearSegmentedColormap.from_list("ndep_white", stops, N=256)
 
 
-def _get_cmap(name: str) -> Union[str, LinearSegmentedColormap]:
+def _with_black_top(cmap: LinearSegmentedColormap, top_frac: float = 0.02) -> LinearSegmentedColormap:
     """
-    Colormap choices:
-    - 'best' or 'turbo' : matplotlib 'turbo' (high contrast, best readability)
-    - 'ndep'            : custom blue->red palette (close to your example)
-    - anything else     : passed through to matplotlib (e.g., 'viridis')
+    Replace the top end of the colormap with black.
+
+    top_frac = 0.02 -> last 2% of the scale becomes black.
+    This approximates "black when value is 1" while remaining robust numerically.
     """
+    top_frac = float(top_frac)
+    if not (0.0 < top_frac < 0.2):
+        raise ValueError("top_frac should be in (0, 0.2)")
+
+    n = 256
+    arr = cmap(np.linspace(0, 1, n))
+    k = max(1, int(round(top_frac * n)))
+    arr[-k:, :3] = 0.0  # RGB -> black
+    arr[-k:, 3] = 1.0   # alpha
+    return LinearSegmentedColormap.from_list(f"{cmap.name}_blacktop", arr, N=n)
+
+
+def _get_cmap(name: str, black_top: bool, black_top_frac: float) -> LinearSegmentedColormap | str:
     n = (name or "").strip().lower()
 
-    if n in {"best", "turbo"}:
-        return "turbo"
+    if n in {"ndep_white", "best", "readable"}:
+        cmap = _base_ndep_white()
+        if black_top:
+            cmap = _with_black_top(cmap, top_frac=black_top_frac)
+        return cmap
 
-    if n in {"ndep", "msa_ndep", "msa_n"}:
-        colors = [
-            "#001a8f",  # deep blue
-            "#005bff",  # blue
-            "#35cfff",  # cyan
-            "#66ff66",  # green
-            "#ffff66",  # yellow
-            "#ff9933",  # orange
-            "#7a0c0c",  # dark red
-        ]
-        return LinearSegmentedColormap.from_list("ndep_like", colors, N=256)
+    if n in {"turbo"}:
+        return "turbo"
 
     return name
 
@@ -162,20 +180,17 @@ def plot_msa_n(
     msa_dir: Path = DEFAULT_DIR,
     oceans_nc: Path = DEFAULT_OCEANS,
     out_dir: Path = DEFAULT_OUT,
-    cmap: str = "best",
+    cmap: str = "ndep_white",
     vmin: float = 0.8,
     vmax: float = 1.0,
     gamma: float = 0.35,
     origin: str = "lower",
+    alpha: float = 0.90,
+    black_top: bool = True,
+    black_top_frac: float = 0.02,
     show: bool = False,
     dpi: int = 200,
 ) -> Path:
-    """
-    gamma:
-      - < 1 : boosts contrast near vmax (recommended for MSA close to 1)
-      - = 1 : linear mapping
-      - > 1 : compresses near vmax
-    """
     out_dir.mkdir(parents=True, exist_ok=True)
 
     da = _load_msa_n(msa_dir, scen)
@@ -186,31 +201,53 @@ def plot_msa_n(
         yrs = da["year"].values
         raise ValueError(f"Year {year} not available. Range {yrs.min()}..{yrs.max()}")
 
-    da_y = da.sel(year=year)
-
-    land = _infer_land_mask(oceans_nc, da_y)
-    if land is not None:
-        da_y = da_y.where(land)
-
-    da_y = _normalize_lon_to_180(_ensure_lat_ascending(da_y))
+    da_y = _normalize_lon_to_180(_ensure_lat_ascending(da.sel(year=year)))
 
     lon = da_y["lon"].values
     lat = da_y["lat"].values
     extent = [float(lon.min()), float(lon.max()), float(lat.min()), float(lat.max())]
 
-    # Perceptual contrast for near-1 fields
+    # Background land mask (grey)
+    land = _load_land_mask(oceans_nc, template=da_y)
+    if land is not None:
+        da_y = da_y.where(land)  # ocean -> NaN
+
+    # Boost contrast near 1
     norm = mcolors.PowerNorm(gamma=gamma, vmin=vmin, vmax=vmax)
 
+    cmap_obj = _get_cmap(cmap, black_top=black_top, black_top_frac=black_top_frac)
+    if hasattr(cmap_obj, "set_bad"):
+        cmap_obj = cmap_obj.copy()
+        cmap_obj.set_bad(color=(1, 1, 1, 0))  # transparent ocean
+
     fig, ax = plt.subplots(figsize=(12, 5.5))
+
+    # draw land background first
+    if land is not None:
+        ax.imshow(
+            land.astype(np.float32).values,
+            extent=extent,
+            origin=origin,
+            interpolation="nearest",
+            cmap="Greys",
+            vmin=0.0,
+            vmax=1.0,
+            alpha=0.22,
+            aspect="auto",
+        )
+
+    # overlay msa layer
     im = ax.imshow(
         da_y.values,
         extent=extent,
         origin=origin,
         interpolation="nearest",
-        cmap=_get_cmap(cmap),
+        cmap=cmap_obj,
         norm=norm,
+        alpha=alpha,
         aspect="auto",
     )
+
     ax.set_title(f"MSA_N — SSP{scen} — {year}")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
@@ -244,10 +281,14 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--oceans-nc", type=str, default=str(DEFAULT_OCEANS))
     p.add_argument("--out-dir", type=str, default=str(DEFAULT_OUT))
 
-    p.add_argument("--cmap", type=str, default="best", help="best/turbo (recommended) or ndep or any matplotlib cmap.")
+    p.add_argument("--cmap", type=str, default="ndep_white")
     p.add_argument("--vmin", type=float, default=0.8)
     p.add_argument("--vmax", type=float, default=1.0)
-    p.add_argument("--gamma", type=float, default=0.35, help="PowerNorm gamma (<1 boosts contrast near vmax).")
+    p.add_argument("--gamma", type=float, default=0.35)
+    p.add_argument("--alpha", type=float, default=0.90)
+    p.add_argument("--black-top", action="store_true", default=True)
+    p.add_argument("--no-black-top", dest="black_top", action="store_false")
+    p.add_argument("--black-top-frac", type=float, default=0.02, help="fraction of top colormap set to black (e.g. 0.02)")
     p.add_argument("--origin", type=str, default="lower", choices=["lower", "upper"])
     p.add_argument("--dpi", type=int, default=200)
     p.add_argument("--show", action="store_true")
@@ -266,6 +307,9 @@ def main() -> None:
         vmin=a.vmin,
         vmax=a.vmax,
         gamma=a.gamma,
+        alpha=a.alpha,
+        black_top=a.black_top,
+        black_top_frac=a.black_top_frac,
         origin=a.origin,
         show=a.show,
         dpi=a.dpi,
