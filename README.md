@@ -1,4 +1,4 @@
-# MSA pipeline (LU, ROAD, CC, N, ENC, SQUARE + GLOBIO + LEGACY)
+# MSA_Square pipeline 
 
 This repository builds **MSA (Mean Species Abundance)** rasters per pressure (**LU**, **ROAD**, **CC**, **N**, **ENC**) and a combined raster **MSA_SQUARE**.
 It also supports:
