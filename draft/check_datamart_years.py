@@ -99,7 +99,7 @@ def check_file(nc_path: Path) -> YearCheckResult:
         ds.close()
 
 
-def main(root: str = "data/datamart") -> None:
+def main(root: str = "data/datamart_legacy") -> None:
     root_path = Path(root)
     files = sorted(root_path.rglob("*.nc"))
     if not files:
