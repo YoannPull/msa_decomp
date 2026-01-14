@@ -26,7 +26,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--lat-col", default="y_latitude", help="Latitude column name in input points.")
     p.add_argument("--lon-col", default="x_longitude", help="Longitude column name in input points.")
 
-    p.add_argument("--suffix", default="_PIERRE", help="Suffix appended to attached columns.")
+    p.add_argument("--suffix", default="", help="Suffix appended to attached columns.")
     p.add_argument(
         "--vars",
         default=",".join(DEFAULT_VARS),
