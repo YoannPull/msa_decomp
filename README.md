@@ -5,7 +5,9 @@ This repository contains the **legacy MSA workflow**:
 - optionally **verify** the legacy `MSA_SQUARE` reconstruction and add **check columns**,
 - plot legacy rasters for selected variables/scenarios/years.
 
-> This repo does **not** build the “new” MSA rasters from public sources. It focuses only on the **legacy datamart**.
+The **legacy datamart** (`data/datamart_legacy/`) is an **internally computed NetCDF datamart built from public datasets** (pre-processed outside of this repository). This repo assumes it is already available locally.
+
+> This repo does **not** build new MSA rasters from public sources. It focuses only on **using** the precomputed legacy datamart (attach + checks + plots).
 
 ---
 
@@ -44,7 +46,7 @@ poetry install
 
 ## Data layout (expected)
 
-* `data/datamart_legacy/` : **legacy NetCDF datamart**
+* `data/datamart_legacy/` : **legacy NetCDF datamart** (internally computed from public data)
 * `data/private/` : private point files (CSV with lat/lon)
 * `outputs/output_legacy/` : attached point outputs (csv/parquet, checked variants)
 * `outputs/plots_legacy/` : legacy raster plots
