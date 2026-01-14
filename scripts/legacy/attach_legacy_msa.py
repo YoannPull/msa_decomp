@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from carrefour.legacy.attach_legacy_msa import (
+from legacy_msa.legacy.attach_legacy_msa import (
     AttachLegacyConfig,
     DEFAULT_VARS,
     run_attach_legacy_file,

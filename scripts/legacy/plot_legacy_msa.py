@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from carrefour.legacy.plot_legacy_msa import PlotLegacyConfig, plot_legacy
+from legacy_msa.legacy.plot_legacy_msa import PlotLegacyConfig, plot_legacy
 
 
 def _parse_args() -> argparse.Namespace:
