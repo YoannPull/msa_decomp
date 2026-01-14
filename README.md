@@ -13,13 +13,13 @@ This repository contains the **legacy MSA workflow**:
 
 Legacy `MSA_SQUARE` is computed as:
 
-\[
+$$
 \mathrm{MSA\_SQUARE}
 =\mathrm{OCEANS}\times\Big(
 \mathrm{MSA}_{LU,art}
 +\mathrm{MSA}_{LU,nat}\times \mathrm{MSA}_{NDEP}\times \mathrm{MSA}_{ENC}\times \mathrm{MSA}_{ROAD}\times \mathrm{MSA}_{CC}
 \Big)
-\]
+$$
 
 - `OCEANS` is a land mask (0 on ocean, 1 on land).
 - The “artificial” LU component is added separately; other pressures apply only on the “natural” fraction.
