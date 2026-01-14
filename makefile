@@ -5,13 +5,21 @@ PY := poetry run python
 # -----------------------------------------------------------------------------
 # Defaults (override from command line)
 # -----------------------------------------------------------------------------
+# Backward compatible: YEAR still works, but MSA_YEAR / LEGACY_YEAR let you decouple.
 YEAR ?= 2100
+
+# Main year for your computed MSA datamarts + plots + points extraction/postprocess
+MSA_YEAR ?= $(YEAR)
+
+# Year used for Pierre legacy extraction/plots (defaults to MSA_YEAR)
+LEGACY_YEAR ?= $(MSA_YEAR)
+
 SCEN ?= 126
 DEBUG ?= 0
 
 # Points extraction defaults
 POINTS ?= data/private/carrefour_loc.csv
-POINTS_OUT ?= outputs/points_with_msa_$(SCEN)_$(YEAR).parquet
+POINTS_OUT ?= outputs/points_with_msa_$(SCEN)_$(MSA_YEAR).parquet
 LAT_COL ?= y_latitude
 LON_COL ?= x_longitude
 
@@ -21,9 +29,12 @@ ENGINE ?=
 
 # GLOBIO defaults
 GLOBIO_DIR ?= data/sources/GLOBIO
-GLOBIO_YEAR ?= 2050
 GLOBIO_SSPS ?= 1 3 5
 GLOBIO_YEARS ?= 2015 2050
+# Default logic:
+# - if MSA_YEAR is an available GLOBIO year -> use it
+# - else fallback to 2050
+GLOBIO_YEAR ?= $(if $(filter $(MSA_YEAR),$(GLOBIO_YEARS)),$(MSA_YEAR),2050)
 GLOBIO_OUTCOL ?= MSA_GLOBIO
 
 # LEGACY (Pierre) defaults
@@ -60,7 +71,7 @@ ROAD_FILL ?= 1
         lu road cc n enc square \
         extract-points extract-points-all extract-points-fast \
         attach-globio attach-globio-ssp attach-globio-all-ssps attach-globio-all-years-ssps \
-        attach-legacy attach-legacy-all legacy-check \
+        attach-legacy attach-legacy-csv attach-legacy-all attach-legacy-all-csv legacy-check \
         postprocess postprocess-all \
         plot-legacy plot-legacy-all \
         plot-lu plot-lu-all \
@@ -75,25 +86,39 @@ help:
 	@echo "Targets:"
 	@echo "  make prepare-road"
 	@echo "  make lu / road / cc / n / enc / square"
-	@echo "  make extract-points POINTS=... SCEN=585 YEAR=2100"
-	@echo "  make extract-points-all POINTS=... YEAR=2100"
-	@echo "  make extract-points-fast ... MAX_FULL_LOAD_MB=600 ENGINE=h5netcdf"
+	@echo ""
+	@echo "MSA (computed datamart) year:"
+	@echo "  - use MSA_YEAR=... (defaults to YEAR)"
+	@echo "  make plot-square MSA_YEAR=2020 SCEN=126"
+	@echo "  make extract-points POINTS=... SCEN=585 MSA_YEAR=2020"
+	@echo "  (backward compatible: YEAR=... also works for MSA_YEAR)"
+	@echo ""
+	@echo "GLOBIO year (only 2015 or 2050):"
 	@echo "  make attach-globio POINTS=... GLOBIO_YEAR=2015"
 	@echo "  make attach-globio-ssp POINTS=... GLOBIO_YEAR=2050 SSP=5"
-	@echo "  make attach-globio-all-ssps POINTS=... GLOBIO_YEAR=2050"
 	@echo "  make attach-globio-all-years-ssps POINTS=..."
-	@echo "  make attach-legacy POINTS=... SCEN=585 YEAR=2100 LEGACY_LAT_FLIP=flip"
+	@echo "  (default: GLOBIO_YEAR = MSA_YEAR if in {2015,2050}, else 2050)"
+	@echo ""
+	@echo "LEGACY (Pierre) year:"
+	@echo "  - use LEGACY_YEAR=... (defaults to MSA_YEAR)"
+	@echo "  make attach-legacy POINTS=... SCEN=585 LEGACY_YEAR=2100 LEGACY_LAT_FLIP=flip"
+	@echo "  make attach-legacy-csv POINTS=... SCEN=585 LEGACY_YEAR=2100 (CSV only)"
 	@echo "    - add DEBUG=1 for verbose logs"
 	@echo "    - LEGACY_VERIFY=1 logs square reconstruction metrics"
 	@echo "    - LEGACY_ADD_CHECK=1 writes *_checked.(parquet|csv) with recon/diff/flags"
-	@echo "  make legacy-check SCEN=126 YEAR=2100  -> add check columns on existing legacy outputs"
-	@echo "  make attach-legacy-all POINTS=... YEAR=2100"
-	@echo "  make plot-legacy SCEN=126 YEAR=2100 VARS='MSA_SQUARE MSA_LU'"
-	@echo "  make plot-legacy-all YEAR=2100"
+	@echo "  make legacy-check SCEN=126 LEGACY_YEAR=2100  -> add check columns on existing legacy outputs"
+	@echo "  make attach-legacy-all POINTS=... LEGACY_YEAR=2100"
+	@echo "  make attach-legacy-all-csv POINTS=... LEGACY_YEAR=2100 (CSV only)"
+	@echo "  make plot-legacy SCEN=126 LEGACY_YEAR=2100 VARS='MSA_SQUARE MSA_LU'"
+	@echo "  make plot-legacy-all LEGACY_YEAR=2100"
+	@echo ""
+	@echo "Postprocess:"
 	@echo "  make postprocess INPUTS='a.parquet b.parquet ...'"
-	@echo "  make postprocess-all YEAR=2100"
-	@echo "  make all-points POINTS=... YEAR=2100   -> extract 126/370/585 then postprocess-all"
-	@echo "  make all-legacy POINTS=... YEAR=2100   -> attach legacy 126/370/585 + check + plot legacy"
+	@echo "  make postprocess-all MSA_YEAR=2100"
+	@echo ""
+	@echo "Convenience:"
+	@echo "  make all-points POINTS=... MSA_YEAR=2100   -> extract 126/370/585 then postprocess-all"
+	@echo "  make all-legacy POINTS=... LEGACY_YEAR=2100 -> attach legacy 126/370/585 + check + plot legacy"
 
 # -----------------------------------------------------------------------------
 # Prepare datamart from public sources
@@ -128,7 +153,7 @@ square:
 	$(PY) scripts/build_msa_square.py --fill-road-na-as-one --fill-cc-na-as-one
 
 # -----------------------------------------------------------------------------
-# Extract MSA + components for point coordinates
+# Extract MSA + components for point coordinates (computed datamart)
 # -----------------------------------------------------------------------------
 
 extract-points:
@@ -136,7 +161,7 @@ extract-points:
 	  --input $(POINTS) \
 	  --out $(POINTS_OUT) \
 	  --scen $(SCEN) \
-	  --year $(YEAR) \
+	  --year $(MSA_YEAR) \
 	  --lat-col $(LAT_COL) \
 	  --lon-col $(LON_COL)
 
@@ -145,7 +170,7 @@ extract-points-fast:
 	  --input $(POINTS) \
 	  --out $(POINTS_OUT) \
 	  --scen $(SCEN) \
-	  --year $(YEAR) \
+	  --year $(MSA_YEAR) \
 	  --lat-col $(LAT_COL) \
 	  --lon-col $(LON_COL) \
 	  --max-full-load-mb $(MAX_FULL_LOAD_MB) \
@@ -154,16 +179,16 @@ extract-points-fast:
 extract-points-all:
 	$(PY) scripts/extract_msa_points.py \
 	  --input $(POINTS) \
-	  --out outputs/points_with_msa_126_$(YEAR).parquet \
-	  --scen 126 --year $(YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
+	  --out outputs/points_with_msa_126_$(MSA_YEAR).parquet \
+	  --scen 126 --year $(MSA_YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
 	$(PY) scripts/extract_msa_points.py \
 	  --input $(POINTS) \
-	  --out outputs/points_with_msa_370_$(YEAR).parquet \
-	  --scen 370 --year $(YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
+	  --out outputs/points_with_msa_370_$(MSA_YEAR).parquet \
+	  --scen 370 --year $(MSA_YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
 	$(PY) scripts/extract_msa_points.py \
 	  --input $(POINTS) \
-	  --out outputs/points_with_msa_585_$(YEAR).parquet \
-	  --scen 585 --year $(YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
+	  --out outputs/points_with_msa_585_$(MSA_YEAR).parquet \
+	  --scen 585 --year $(MSA_YEAR) --lat-col $(LAT_COL) --lon-col $(LON_COL)
 
 # Handy: all scenarios points + postprocess in one go
 all-points: extract-points-all postprocess-all
@@ -222,10 +247,10 @@ attach-legacy:
 	# 1) Attach legacy (parquet)
 	$(PY) scripts/legacy/attach_legacy_msa.py \
 	  --input $(POINTS) \
-	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR).parquet \
+	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).parquet \
 	  --legacy-root $(LEGACY_ROOT) \
 	  --scen $(SCEN) \
-	  --year $(YEAR) \
+	  --year $(LEGACY_YEAR) \
 	  --lat-col $(LAT_COL) \
 	  --lon-col $(LON_COL) \
 	  --suffix $(LEGACY_SUFFIX) \
@@ -237,10 +262,10 @@ attach-legacy:
 	# 2) Attach legacy (csv)
 	$(PY) scripts/legacy/attach_legacy_msa.py \
 	  --input $(POINTS) \
-	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR).csv \
+	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).csv \
 	  --legacy-root $(LEGACY_ROOT) \
 	  --scen $(SCEN) \
-	  --year $(YEAR) \
+	  --year $(LEGACY_YEAR) \
 	  --lat-col $(LAT_COL) \
 	  --lon-col $(LON_COL) \
 	  --suffix $(LEGACY_SUFFIX) \
@@ -251,27 +276,66 @@ attach-legacy:
 
 	# 3) Optionnel: ajouter colonnes de check (parquet + csv)
 	@if [ "$(LEGACY_ADD_CHECK)" = "1" ]; then \
-	  $(MAKE) legacy-check SCEN=$(SCEN) YEAR=$(YEAR); \
+	  $(MAKE) legacy-check SCEN=$(SCEN) LEGACY_YEAR=$(LEGACY_YEAR); \
+	fi
+
+# CSV-only variant
+attach-legacy-csv:
+	@mkdir -p $(LEGACY_OUTDIR)
+
+	# Attach legacy (csv only)
+	$(PY) scripts/legacy/attach_legacy_msa.py \
+	  --input $(POINTS) \
+	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).csv \
+	  --legacy-root $(LEGACY_ROOT) \
+	  --scen $(SCEN) \
+	  --year $(LEGACY_YEAR) \
+	  --lat-col $(LAT_COL) \
+	  --lon-col $(LON_COL) \
+	  --suffix $(LEGACY_SUFFIX) \
+	  --max-full-load-mb $(LEGACY_MAX_FULL_LOAD_MB) \
+	  --lat-flip $(LEGACY_LAT_FLIP) \
+	  $(if $(filter 1,$(DEBUG)),--debug,) \
+	  $(if $(filter 1,$(LEGACY_VERIFY)),--verify-square,)
+
+	# Optionnel: ajouter colonnes de check (csv only)
+	@if [ "$(LEGACY_ADD_CHECK)" = "1" ]; then \
+	  $(PY) scripts/legacy/add_square_check_column.py \
+	    --in $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).csv \
+	    --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR)_checked.csv \
+	    --suffix $(LEGACY_SUFFIX) \
+	    --tol $(LEGACY_CHECK_TOL); \
 	fi
 
 legacy-check:
 	$(PY) scripts/legacy/add_square_check_column.py \
-	  --in $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR).parquet \
-	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR)_checked.parquet \
+	  --in $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).parquet \
+	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR)_checked.parquet \
 	  --suffix $(LEGACY_SUFFIX) \
 	  --tol $(LEGACY_CHECK_TOL)
 
 	$(PY) scripts/legacy/add_square_check_column.py \
-	  --in $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR).csv \
-	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(YEAR)_checked.csv \
+	  --in $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR).csv \
+	  --out $(LEGACY_OUTDIR)/points_with_legacy_$(SCEN)_$(LEGACY_YEAR)_checked.csv \
 	  --suffix $(LEGACY_SUFFIX) \
 	  --tol $(LEGACY_CHECK_TOL)
 
 attach-legacy-all:
 	@set -e; \
 	for s in 126 370 585; do \
-	  echo "[RUN] attach-legacy scen=$$s year=$(YEAR) lat_flip=$(LEGACY_LAT_FLIP)"; \
-	  $(MAKE) attach-legacy SCEN=$$s YEAR=$(YEAR) POINTS="$(POINTS)" LAT_COL="$(LAT_COL)" LON_COL="$(LON_COL)" \
+	  echo "[RUN] attach-legacy scen=$$s year=$(LEGACY_YEAR) lat_flip=$(LEGACY_LAT_FLIP)"; \
+	  $(MAKE) attach-legacy SCEN=$$s LEGACY_YEAR=$(LEGACY_YEAR) POINTS="$(POINTS)" LAT_COL="$(LAT_COL)" LON_COL="$(LON_COL)" \
+	    LEGACY_ROOT="$(LEGACY_ROOT)" LEGACY_SUFFIX="$(LEGACY_SUFFIX)" LEGACY_OUTDIR="$(LEGACY_OUTDIR)" \
+	    LEGACY_MAX_FULL_LOAD_MB="$(LEGACY_MAX_FULL_LOAD_MB)" LEGACY_LAT_FLIP="$(LEGACY_LAT_FLIP)" \
+	    DEBUG="$(DEBUG)" LEGACY_VERIFY="$(LEGACY_VERIFY)" LEGACY_ADD_CHECK="$(LEGACY_ADD_CHECK)" LEGACY_CHECK_TOL="$(LEGACY_CHECK_TOL)"; \
+	done
+
+# CSV-only all scens
+attach-legacy-all-csv:
+	@set -e; \
+	for s in 126 370 585; do \
+	  echo "[RUN] attach-legacy-csv scen=$$s year=$(LEGACY_YEAR) lat_flip=$(LEGACY_LAT_FLIP)"; \
+	  $(MAKE) attach-legacy-csv SCEN=$$s LEGACY_YEAR=$(LEGACY_YEAR) POINTS="$(POINTS)" LAT_COL="$(LAT_COL)" LON_COL="$(LON_COL)" \
 	    LEGACY_ROOT="$(LEGACY_ROOT)" LEGACY_SUFFIX="$(LEGACY_SUFFIX)" LEGACY_OUTDIR="$(LEGACY_OUTDIR)" \
 	    LEGACY_MAX_FULL_LOAD_MB="$(LEGACY_MAX_FULL_LOAD_MB)" LEGACY_LAT_FLIP="$(LEGACY_LAT_FLIP)" \
 	    DEBUG="$(DEBUG)" LEGACY_VERIFY="$(LEGACY_VERIFY)" LEGACY_ADD_CHECK="$(LEGACY_ADD_CHECK)" LEGACY_CHECK_TOL="$(LEGACY_CHECK_TOL)"; \
@@ -298,7 +362,7 @@ postprocess:
 postprocess-all:
 	@mkdir -p $(POST_DIR)
 	$(PY) scripts/postprocess_points.py \
-	  --inputs outputs/points_with_msa_126_$(YEAR).parquet outputs/points_with_msa_370_$(YEAR).parquet outputs/points_with_msa_585_$(YEAR).parquet \
+	  --inputs outputs/points_with_msa_126_$(MSA_YEAR).parquet outputs/points_with_msa_370_$(MSA_YEAR).parquet outputs/points_with_msa_585_$(MSA_YEAR).parquet \
 	  --out-dir $(POST_DIR) \
 	  --road-col $(ROAD_COL) \
 	  --road-fill $(ROAD_FILL) \
@@ -310,16 +374,16 @@ postprocess-all:
 # Plot LEGACY maps (Pierre datamart_legacy)
 # -----------------------------------------------------------------------------
 # Example:
-#   make plot-legacy YEAR=2100 SCEN=126 VARS="MSA_SQUARE MSA_LU"
-#   make plot-legacy-all YEAR=2100
-#   make plot-legacy-all YEAR=2100 LEGACY_VARS="MSA_SQUARE"
+#   make plot-legacy LEGACY_YEAR=2100 SCEN=126 VARS="MSA_SQUARE MSA_LU"
+#   make plot-legacy-all LEGACY_YEAR=2100
+#   make plot-legacy-all LEGACY_YEAR=2100 LEGACY_VARS="MSA_SQUARE"
 
 plot-legacy:
 	@mkdir -p $(LEGACY_PLOTS_DIR)
 	$(PY) scripts/legacy/plot_legacy_msa.py \
 	  --legacy-root $(LEGACY_ROOT) \
 	  --out-dir $(LEGACY_PLOTS_DIR) \
-	  --year $(YEAR) \
+	  --year $(LEGACY_YEAR) \
 	  --scens $(SCEN) \
 	  --vars $(if $(strip $(VARS)),$(VARS),$(LEGACY_VARS)) \
 	  --cmap $(LEGACY_CMAP) \
@@ -331,7 +395,7 @@ plot-legacy-all:
 	$(PY) scripts/legacy/plot_legacy_msa.py \
 	  --legacy-root $(LEGACY_ROOT) \
 	  --out-dir $(LEGACY_PLOTS_DIR) \
-	  --year $(YEAR) \
+	  --year $(LEGACY_YEAR) \
 	  --scens 126 370 585 \
 	  --vars $(LEGACY_VARS) \
 	  --cmap $(LEGACY_CMAP) \
@@ -343,49 +407,50 @@ plot-legacy-all:
 # -----------------------------------------------------------------------------
 
 plot-lu:
-	$(PY) scripts/plot_msa_lu.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_lu.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-lu-all:
-	$(PY) scripts/plot_msa_lu.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_lu.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_lu.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_lu.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_lu.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_lu.py --year $(MSA_YEAR) --scen 585
 
 plot-road:
-	$(PY) scripts/plot_msa_road.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_road.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-road-all:
-	$(PY) scripts/plot_msa_road.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_road.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_road.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_road.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_road.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_road.py --year $(MSA_YEAR) --scen 585
 
 plot-cc:
-	$(PY) scripts/plot_msa_cc.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_cc.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-cc-all:
-	$(PY) scripts/plot_msa_cc.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_cc.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_cc.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_cc.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_cc.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_cc.py --year $(MSA_YEAR) --scen 585
 
 plot-n:
-	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_n.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-n-all:
-	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_n.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_n.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_n.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_n.py --year $(MSA_YEAR) --scen 585
 
 plot-enc:
-	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_enc.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-enc-all:
-	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_enc.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_enc.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_enc.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_enc.py --year $(MSA_YEAR) --scen 585
 
 plot-square:
-	$(PY) scripts/plot_msa_square.py --year $(YEAR) --scen $(SCEN)
+	$(PY) scripts/plot_msa_square.py --year $(MSA_YEAR) --scen $(SCEN)
 
 plot-square-all:
-	$(PY) scripts/plot_msa_square.py --year $(YEAR) --scen 126
-	$(PY) scripts/plot_msa_square.py --year $(YEAR) --scen 370
-	$(PY) scripts/plot_msa_square.py --year $(YEAR) --scen 585
+	$(PY) scripts/plot_msa_square.py --year $(MSA_YEAR) --scen 126
+	$(PY) scripts/plot_msa_square.py --year $(MSA_YEAR) --scen 370
+	$(PY) scripts/plot_msa_square.py --year $(MSA_YEAR) --scen 585
+
