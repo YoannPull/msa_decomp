@@ -38,9 +38,23 @@ Dependencies are defined in `pyproject.toml`.
 ---
 
 ## Install
+
+### Recommended (Poetry)
 ```bash
 poetry install
 ````
+
+### Alternative (pip from a frozen environment)
+
+If you cannot or do not want to use Poetry, you can install the exact frozen dependency set:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-freeze.txt
+```
+
+> `requirements-freeze.txt` is a `pip freeze` snapshot (fully pinned, includes transitive dependencies).
 
 ---
 
@@ -50,6 +64,25 @@ poetry install
 * `data/private/` : private point files (CSV with lat/lon)
 * `outputs/output_legacy/` : attached point outputs (csv/parquet, checked variants)
 * `outputs/plots_legacy/` : legacy raster plots
+
+---
+
+## Input points format
+
+Your input CSV must contain **latitude** and **longitude** columns.
+
+By default, the Makefile expects:
+
+* `LAT_COL=y_latitude`
+* `LON_COL=x_longitude`
+
+If your file uses different column names, override them:
+
+```bash
+make attach-legacy-csv POINTS=path/to/points.csv LAT_COL=lat LON_COL=lon SCEN=126 LEGACY_YEAR=2025
+```
+
+> For convenience, it is best to keep the **same column names across all your private point files**.
 
 ---
 
